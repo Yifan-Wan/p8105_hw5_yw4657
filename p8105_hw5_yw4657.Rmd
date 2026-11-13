@@ -168,3 +168,163 @@ the upward trend in the experimental group suggests a positive effect of the exp
 on the measured outcome. However, since we did not conduct a hypothesis test, 
 this descriptive comparison alone does not establish statistical significance.
 
+# Problem 3
+
+```{r simulation-function}
+sim_ttest = function(mu, n = 30, sigma = 5) {
+
+  sim_data = tibble(
+    x = rnorm(
+      n = n,
+      mean = mu,
+      sd = sigma
+    )
+  )
+
+  test_results =
+    t.test(sim_data$x, mu = 0) |>
+    broom::tidy()
+
+  test_results |>
+    select(estimate, p.value)
+}
+```
+
+```{r run-simulation}
+sim_results_df =
+  expand_grid(
+    mu = 0:6,
+    iter = 1:5000
+  ) |>
+  mutate(
+    test_results = map(mu, sim_ttest)
+  ) |>
+  unnest(test_results) |>
+  mutate(
+    reject = p.value < 0.05
+  )
+
+sim_results_df
+```
+
+```{r power-summary}
+power_df =
+  sim_results_df |>
+  group_by(mu) |>
+  summarize(
+    power = mean(reject),
+    .groups = "drop"
+  )
+
+power_df
+```
+
+```{r power-plot}
+power_df |>
+  ggplot(aes(x = mu, y = power)) +
+  geom_point(size = 2) +
+  geom_line() +
+  scale_x_continuous(breaks = 0:6) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = scales::percent
+  ) +
+  labs(
+    title = "Statistical Power by True Mean",
+    x = "True Mean (mu)",
+    y = "Proportion of Null Hypotheses Rejected"
+  )
+```
+
+The probability of rejecting the null hypothesis increases as the true mean increases from 0 to 6. 
+When the true mean is 0, the rejection proportion is approximately 0.05, consistent with 
+the nominal Type I error rate. As the true mean moves further away from the null value, 
+the effect size increases relative to the fixed standard deviation, making it easier 
+to detect a statistically significant difference. Consequently, statistical power increases 
+and approaches 1 for larger values of the true mean.
+
+```{r estimate-summary}
+estimate_df =
+  sim_results_df |>
+  group_by(mu) |>
+  summarize(
+    mean_estimate = mean(estimate),
+    mean_estimate_rejected =
+      mean(estimate[reject]),
+    .groups = "drop"
+  )
+
+estimate_df
+```
+
+```{r estimate-plot}
+estimate_df |>
+  ggplot(aes(x = mu, y = mean_estimate)) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    linetype = "dashed"
+  ) +
+  scale_x_continuous(breaks = 0:6) +
+  labs(
+    title = "Average Estimate by True Mean",
+    x = "True Mean (mu)",
+    y = "Average Estimate of mu"
+  )
+```
+
+```{r estimate-comparison-plot}
+estimate_df |>
+  pivot_longer(
+    cols = c(
+      mean_estimate,
+      mean_estimate_rejected
+    ),
+    names_to = "estimate_type",
+    values_to = "average_estimate"
+  ) |>
+  mutate(
+    estimate_type = recode(
+      estimate_type,
+      mean_estimate = "All Samples",
+      mean_estimate_rejected = "Rejected Samples Only"
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = mu,
+      y = average_estimate,
+      color = estimate_type
+    )
+  ) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    linetype = "dashed"
+  ) +
+  scale_x_continuous(breaks = 0:6) +
+  labs(
+    title = "Average Estimates Across All and Rejected Samples",
+    x = "True Mean (mu)",
+    y = "Average Estimated Mean",
+    color = "Sample Selection"
+  )
+```
+
+The average estimates across all simulated samples are approximately equal to the true mean, 
+consistent with the unbiasedness of the sample mean. However, when considering only samples 
+in which the null hypothesis was rejected, the average estimated mean tends to be larger than the true mean,
+particularly for small positive effect sizes.
+This difference arises from selection bias. When the true effect is small, samples with unusually 
+large positive estimates are more likely to produce statistically significant results. 
+Restricting the analysis to significant results therefore overrepresents larger estimates 
+and can exaggerate the magnitude of the true effect. As the true mean increases, 
+statistical power approaches 1, meaning that nearly all samples reject the null hypothesis. 
+Consequently, the difference between the average estimates from all samples and rejected samples becomes smaller.
+When the true mean is 0, statistically significant estimates can occur in both positive and negative directions, 
+so their average may still be close to 0. Overall, these results illustrate how selecting estimates 
+based on statistical significance can lead to exaggerated effect sizes, especially when statistical power is low.
