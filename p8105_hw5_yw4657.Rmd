@@ -3,7 +3,6 @@ title: "p8105_hw5_yw4657"
 output: github_document
 ---
 
-
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(broom)
@@ -26,7 +25,6 @@ set.seed(4657)
 
 # Problem 1
 
-
 ```{r birthday-function}
 birthday_repeated = function(n) {
 
@@ -41,7 +39,6 @@ birthday_repeated = function(n) {
   return(repeated)
 }
 ```
-
 
 ```{r birthday-simulation}
 birthday_results_df =
@@ -64,7 +61,6 @@ birthday_prob_df =
 birthday_prob_df
 ```
 
-
 ```{r birthday-plot}
 birthday_prob_df |>
   ggplot(aes(x = group_size, y = prob_repeat)) +
@@ -85,4 +81,90 @@ The probability that at least two people share a birthday increases as group siz
 The relationship is nonlinear, with the probability increasing rapidly for smaller group sizes 
 before gradually approaching 1. The probability exceeds approximately 50% when the group contains 23 people. 
 This illustrates the birthday paradox, where shared birthdays become surprisingly likely even in relatively small groups.
+
+# Problem 2
+
+```{r import-data}
+file_names =
+  tibble(
+    file_name = list.files(
+      path = "./data",
+      pattern = "\\.csv$",
+      full.names = TRUE
+    )
+  )
+
+file_names
+```
+
+```{r read-data}
+study_df =
+  file_names |>
+  mutate(
+    data = map(file_name, read_csv, show_col_types = FALSE)
+  )
+
+study_df
+```
+
+```{r tidy-data}
+study_tidy_df =
+  study_df |>
+  mutate(
+    arm = case_when(
+      str_detect(file_name, "con_") ~ "Control",
+      str_detect(file_name, "exp_") ~ "Experimental"
+    ),
+    subject_id = str_extract(
+      basename(file_name), "\\d+"
+    )
+  ) |>
+  select(-file_name) |>
+  unnest(data) |>
+  pivot_longer(
+    cols = starts_with("week_"),
+    names_to = "week",
+    values_to = "observation"
+  ) |>
+  mutate(
+    week = as.numeric(str_remove(week, "week_")),
+    arm = factor(
+      arm,
+      levels = c("Control", "Experimental")
+    )
+  ) |>
+  arrange(arm, subject_id, week)
+
+study_tidy_df
+```
+
+```{r spaghetti-plot}
+study_tidy_df |>
+  ggplot(
+    aes(
+      x = week,
+      y = observation,
+      group = interaction(arm, subject_id),
+      color = arm
+    )
+  ) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  facet_grid(. ~ arm) +
+  scale_x_continuous(breaks = 1:8) +
+  labs(
+    title = "Weekly Observations by Treatment Arm",
+    x = "Week",
+    y = "Observation",
+    color = "Treatment Arm"
+  )
+```
+
+The spaghetti plot shows different longitudinal patterns between the control and experimental groups. 
+Observations in the control group remain relatively stable across the eight weeks, 
+with some individual variability. In contrast, participants in the experimental group 
+generally show increasing observations over time. Although there is variation across individuals, 
+the upward trend in the experimental group suggests a positive effect of the experimental intervention 
+on the measured outcome. However, since we did not conduct a hypothesis test, 
+this descriptive comparison alone does not establish statistical significance.
 
